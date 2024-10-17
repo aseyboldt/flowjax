@@ -34,6 +34,7 @@ def fit_to_data(
     optimizer: optax.GradientTransformation | None = None,
     return_best: bool = True,
     show_progress: bool = True,
+    opt_state=None,
 ):
     r"""Train a distribution (e.g. a flow) to samples from the target distribution.
 
@@ -79,7 +80,9 @@ def fit_to_data(
         is_leaf=lambda leaf: isinstance(leaf, wrappers.NonTrainable),
     )
     best_params = params
-    opt_state = optimizer.init(params)
+
+    if opt_state is None:
+        opt_state = optimizer.init(params)
 
     # train val split
     key, subkey = jr.split(key)
@@ -128,4 +131,4 @@ def fit_to_data(
 
     params = best_params if return_best else params
     dist = eqx.combine(params, static)
-    return dist, losses
+    return dist, losses, opt_state
