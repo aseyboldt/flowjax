@@ -14,6 +14,7 @@ import equinox as eqx
 import jax.numpy as jnp
 from equinox import AbstractVar
 from jaxtyping import Array, ArrayLike
+import jax
 
 from flowjax.utils import _get_ufunc_signature, arraylike_to_array
 from flowjax.wrappers import unwrap
@@ -149,6 +150,17 @@ class AbstractBijection(eqx.Module):
             condition: Condition array with shape matching bijection.cond_shape.
                 Required for conditional bijections. Defaults to None.
         """
+
+    def inverse_gradient_and_val(
+        self,
+        y: Array,
+        y_grad: Array,
+        y_logp: Array,
+    ) -> tuple[Array, Array, Array]:
+        x, logdet = self.inverse_and_log_det(y)
+        _, pull_grad_fn = jax.vjp(self.transform_and_log_det, x)
+        (x_grad,) = pull_grad_fn((y_grad, 1.0))
+        return (x, x_grad, y_logp + logdet)
 
     @property
     def _vectorize(self):
