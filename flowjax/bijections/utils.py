@@ -79,10 +79,21 @@ class Permute(AbstractBijection):
         )
 
     def transform_and_log_det(self, x, condition=None):
-        return x[self.permutation], jnp.array(0)
+        return x[self.permutation], jnp.array(0.0)
 
     def inverse_and_log_det(self, y, condition=None):
-        return y[self.inverse_permutation], jnp.array(0)
+        return y[self.inverse_permutation], jnp.array(0.0)
+
+    def inverse_gradient_and_val(
+        self,
+        y: Array,
+        y_grad: Array,
+        y_logp: Array,
+        condition: Array | None = None,
+    ) -> tuple[Array, Array, Array]:
+        x = y[self.inverse_permutation]
+        x_grad = y_grad[self.inverse_permutation]
+        return x, x_grad, y_logp
 
 
 class Flip(AbstractBijection):
