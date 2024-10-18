@@ -160,7 +160,7 @@ class AbstractBijection(eqx.Module):
         x, logdet = self.inverse_and_log_det(y)
         _, pull_grad_fn = jax.vjp(self.transform_and_log_det, x)
         (x_grad,) = pull_grad_fn((y_grad, 1.0))
-        return (x, x_grad, y_logp + logdet)
+        return (x, x_grad, y_logp - logdet)
 
     @property
     def _vectorize(self):

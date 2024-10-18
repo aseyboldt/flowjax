@@ -118,7 +118,7 @@ class Coupling(AbstractBijection):
         transformer = eqx.filter_vmap(self.transformer_constructor)(transformer_params)
         return Vmap(transformer, in_axes=eqx.if_array(0))
 
-    def _inverse_gradient_and_val(
+    def inverse_gradient_and_val(
         self,
         y: Array,
         y_grad: Array,
@@ -126,65 +126,38 @@ class Coupling(AbstractBijection):
         *,
         condition=None,
     ) -> tuple[Array, Array, Array]:
-        if False:
-            x_cond, y_trans = y[: self.untransformed_dim], y[self.untransformed_dim :]
-            y_grad_cond, y_grad_trans = (
-                y_grad[: self.untransformed_dim],
-                y_grad[self.untransformed_dim :],
-            )
+        y_cond, y_trans = y[: self.untransformed_dim], y[self.untransformed_dim :]
+        x_cond = y_cond
 
-            nn_input = (
-                x_cond if condition is None else jnp.concatenate((x_cond, condition))
-            )
-            transformer_params = self.conditioner(nn_input)
-            transformer = self._flat_params_to_transformer(transformer_params)
-            x_trans, log_det = transformer.inverse_and_log_det(y_trans)
-
-            def transform_and_log_det(x_cond, x_trans, condition=None):
-                nn_input = (
-                    x_cond if condition is None else jnp.hstack((x_cond, condition))
-                )
-                transformer_params = self.conditioner(nn_input)
-                transformer = self._flat_params_to_transformer(transformer_params)
-                y_trans, log_det = transformer.transform_and_log_det(x_trans)
-                y = jnp.hstack((x_cond, y_trans))
-                return y, log_det
-
-            _, pull_grad_fn = jax.vjp(transform_and_log_det, x_cond, x_trans)
-            (x_cond_grad, x_trans_grad) = pull_grad_fn((y_grad, 1.0))
-            x_grad = jnp.hstack((x_cond_grad, x_trans_grad))
-
-            x = jnp.hstack((x_cond, x_trans))
-            return (x, x_grad, y_logp + log_det)
-
-        x_cond, y_trans = y[: self.untransformed_dim], y[self.untransformed_dim :]
         y_grad_cond, y_grad_trans = (
             y_grad[: self.untransformed_dim],
             y_grad[self.untransformed_dim :],
         )
 
-        def transform(x_cond):
+        def conditioner(x_cond):
             nn_input = (
                 x_cond if condition is None else jnp.concatenate((x_cond, condition))
             )
-            transformer_params = self.conditioner(nn_input)
+            return self.conditioner(nn_input)
+
+        transformer_params, nn_pull = jax.vjp(conditioner, x_cond)
+
+        def pull_transformer_grad(transformer_params):
             transformer = self._flat_params_to_transformer(transformer_params)
 
-            x_trans, x_grad_trans, log_det = transformer.inverse_gradient_and_val(
-                y_trans, y_grad_trans, 0.0
+            x_trans, x_grad_trans, x_logp = transformer.inverse_gradient_and_val(
+                y_trans, y_grad_trans, y_logp
             )
-            return (log_det, x_trans), x_grad_trans
 
-        (log_det, x_trans), pull_fn, x_grad_trans = jax.vjp(
-            transform, x_cond, has_aux=True
+            return (x_logp, x_trans), x_grad_trans
+
+        ((x_logp, x_trans), pull_pull_transformer_grad, x_grad_trans) = jax.vjp(
+            pull_transformer_grad, transformer_params, has_aux=True
         )
-        (x_cond_logp_grad,) = pull_fn((-1.0, y_grad_trans))
-        # ((log_det, (x_trans, x_grad_trans)), x_cond_logp_grad) = jax.value_and_grad(
-        #    transform, has_aux=True
-        # )(x_cond)
 
-        x_logp = y_logp + log_det
+        (co_transformer_params,) = pull_pull_transformer_grad((1.0, -x_grad_trans))
+        (co_x_cond,) = nn_pull(co_transformer_params)
 
         x = jnp.hstack((x_cond, x_trans))
-        x_grad = jnp.hstack((y_grad_cond + x_cond_logp_grad, x_grad_trans))
+        x_grad = jnp.hstack((y_grad_cond + co_x_cond, x_grad_trans))
         return x, x_grad, x_logp
