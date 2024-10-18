@@ -5,6 +5,7 @@ from collections.abc import Callable
 import equinox as eqx
 import jax.numpy as jnp
 import jax.random as jr
+import jax
 import optax
 from jaxtyping import ArrayLike, PRNGKeyArray, PyTree
 from tqdm import tqdm
@@ -97,21 +98,14 @@ def fit_to_data(
         train_data = [jr.permutation(subkeys[0], a) for a in train_data]
         val_data = [jr.permutation(subkeys[1], a) for a in val_data]
 
-        # Train epoch
-        batch_losses = []
-        for batch in zip(*get_batches(train_data, batch_size), strict=True):
-            key, subkey = jr.split(key)
-            params, opt_state, loss_i = step(
-                params,
-                static,
-                *batch,
-                optimizer=optimizer,
-                opt_state=opt_state,
-                loss_fn=loss_fn,
-                key=subkey,
-            )
-            batch_losses.append(loss_i)
-        losses["train"].append(sum(batch_losses) / len(batch_losses))
+        key, subkey = jr.split(key)
+        batches = get_batches(train_data, batch_size)
+
+        params, opt_state, batch_losses = _step_batch_loop(
+            params, static, opt_state, optimizer, loss_fn, subkey, *batches
+        )
+
+        losses["train"].append(float(jnp.mean(batch_losses)))
 
         # Val epoch
         batch_losses = []
@@ -132,3 +126,26 @@ def fit_to_data(
     params = best_params if return_best else params
     dist = eqx.combine(params, static)
     return dist, losses, opt_state
+
+
+@eqx.filter_jit
+def _step_batch_loop(params, static, opt_state, optimizer, loss_fn, key, *batches):
+    def scan_fn(carry, *batch):
+        params, opt_state, key = carry
+        key, subkey = jr.split(key)
+        params, opt_state, loss_i = step(
+            params,
+            static,
+            *batch,
+            optimizer=optimizer,
+            opt_state=opt_state,
+            loss_fn=loss_fn,
+            key=subkey,
+        )
+        return (params, opt_state, key), loss_i
+
+    (params, opt_state, _), batch_losses = jax.lax.scan(
+        scan_fn, (params, opt_state, key), *batches
+    )
+
+    return params, opt_state, batch_losses
