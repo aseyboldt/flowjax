@@ -106,11 +106,15 @@ class Flip(AbstractBijection):
     shape: tuple[int, ...] = ()
     cond_shape: ClassVar[None] = None
 
-    def transform_and_log_det(self, x, condition=None):
-        return jnp.flip(x), jnp.array(0)
+    def transform_and_log_det(
+        self, x: Array, condition: Array | None = None
+    ) -> tuple[Array, Array]:
+        return jnp.flip(x), jnp.zeros(())
 
-    def inverse_and_log_det(self, y, condition=None):
-        return jnp.flip(y), jnp.array(0)
+    def inverse_and_log_det(
+        self, y: Array, condition: Array | None = None
+    ) -> tuple[Array, Array]:
+        return jnp.flip(y), jnp.zeros(())
 
 
 class Partial(AbstractBijection):  # TODO rename to avoid confusion with functools
