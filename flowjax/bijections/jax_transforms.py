@@ -3,6 +3,7 @@
 from collections.abc import Callable
 
 import equinox as eqx
+from jax import Array
 import jax.numpy as jnp
 from jax.lax import scan
 from jax.tree_util import tree_leaves, tree_map
@@ -63,6 +64,22 @@ class Scan(AbstractBijection):
     @property
     def cond_shape(self):
         return self.bijection.cond_shape
+
+    def inverse_gradient_and_val(
+        self,
+        y: Array,
+        y_grad: Array,
+        y_logp: Array,
+        condition: Array | None = None,
+    ) -> tuple[Array, Array, Array]:
+        def step(carry, bijection):
+            carry = bijection.inverse_gradient_and_val(*carry, condition)
+            return (carry, None)
+
+        (y, y_grad, y_logp), _ = _filter_scan(
+            step, (y, y_grad, y_logp), self.bijection, reverse=True
+        )
+        return y, y_grad, y_logp
 
 
 def _filter_scan(f, init, xs, *, reverse=False):
@@ -191,6 +208,19 @@ class Vmap(AbstractBijection):
 
         x, log_det = self.vmap(_inverse_and_log_det)(self.bijection, y, condition)
         return x, jnp.sum(log_det)
+
+    def inverse_gradient_and_val(
+        self, y: Array, y_grad: Array, y_logp: Array, condition: Array | None = None
+    ) -> tuple[Array, Array, Array]:
+        def _inverse_gradient_and_val(bijection, y, y_grad, y_logp, condition):
+            return bijection.inverse_gradient_and_val(y, y_grad, y_logp, condition)
+
+        y, y_grad, log_det = eqx.filter_vmap(
+            _inverse_gradient_and_val,
+            in_axes=(self.in_axes[0], 0, 0, None, self.in_axes[-1]),
+            axis_size=self.axis_size,
+        )(self.bijection, y, y_grad, jnp.zeros(()), condition)
+        return y, y_grad, jnp.sum(log_det) + y_logp
 
     @property
     def shape(self):
