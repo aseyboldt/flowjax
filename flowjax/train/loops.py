@@ -90,6 +90,7 @@ def fit_to_data(
     val_prop: float = 0.1,
     return_best: bool = True,
     show_progress: bool = True,
+    opt_state=None,
 ):
     r"""Train a PyTree (e.g. a distribution) to samples from the target.
 
@@ -116,9 +117,11 @@ def fit_to_data(
             was reached (when True), or the parameters after the last update (when
             False). Defaults to True.
         show_progress: Whether to show progress bar. Defaults to True.
+        opt_state: Optinal initial state of the optimizer.
 
     Returns:
-        A tuple containing the trained distribution and the losses.
+        A tuple containing the trained distribution and a dict with optimization
+        information like the losses and the optimizer state.
     """
     data = (x,) if condition is None else (x, condition)
     data = tuple(jnp.asarray(a) for a in data)
@@ -135,7 +138,8 @@ def fit_to_data(
         is_leaf=lambda leaf: isinstance(leaf, paramax.NonTrainable),
     )
     best_params = params
-    opt_state = optimizer.init(params)
+    if opt_state is None:
+        opt_state = optimizer.init(params)
 
     # train val split
     key, subkey = jr.split(key)
@@ -184,4 +188,6 @@ def fit_to_data(
 
     params = best_params if return_best else params
     dist = eqx.combine(params, static)
+
+    losses["opt_state"] = opt_state
     return dist, losses
