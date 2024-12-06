@@ -78,7 +78,7 @@ def fit_to_key_based_loss(
 def fit_to_data(
     key: PRNGKeyArray,
     dist: PyTree,  # Custom losses may support broader types than AbstractDistribution
-    x: ArrayLike,
+    x: ArrayLike | tuple[ArrayLike, ...],
     *,
     condition: ArrayLike | None = None,
     loss_fn: Callable | None = None,
@@ -123,7 +123,12 @@ def fit_to_data(
         A tuple containing the trained distribution and a dict with optimization
         information like the losses and the optimizer state.
     """
-    data = (x,) if condition is None else (x, condition)
+    if isinstance(x, tuple):
+        data = x
+    else:
+        data = (x,)
+    if condition is not None:
+        data = (*data, condition)
     data = tuple(jnp.asarray(a) for a in data)
 
     if loss_fn is None:
