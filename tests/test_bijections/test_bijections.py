@@ -31,6 +31,7 @@ from flowjax.bijections import (
     Power,
     RationalQuadraticSpline,
     Reshape,
+    Sandwich,
     Scale,
     Scan,
     Sigmoid,
@@ -211,6 +212,10 @@ bijections = {
         ),
         shape=(1, 4, 1),
         cond_shape=(),
+    ),
+    "Sandwich": lambda: Sandwich(
+        Exp(),
+        Affine(0.1, 0.5),
     ),
     "DCT": lambda: DCT(shape=(3, 4)),
     "Householder": lambda: Householder(jnp.ones(3)),
