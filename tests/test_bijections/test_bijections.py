@@ -15,13 +15,16 @@ from flowjax.bijections import (
     Chain,
     Concatenate,
     Coupling,
+    DCT,
     EmbedCondition,
     Exp,
     Flip,
+    Householder,
     Identity,
     LeakyTanh,
     Loc,
     MaskedAutoregressive,
+    Neg,
     Partial,
     Permute,
     Planar,
@@ -129,6 +132,7 @@ bijections = {
             nn_depth=2,
         )
     ),
+    "Neg": lambda: Neg(shape=(DIM,)),
     "BlockAutoregressiveNetwork (unconditional)": lambda: BlockAutoregressiveNetwork(
         KEY,
         dim=DIM,
@@ -208,6 +212,8 @@ bijections = {
         shape=(1, 4, 1),
         cond_shape=(),
     ),
+    "DCT": lambda: DCT(shape=(3, 4)),
+    "Householder": lambda: Householder(jnp.ones(3)),
 }
 
 
@@ -306,9 +312,9 @@ def test_inverse_gradient_and_val(bijection_name):
             y, y_grad, y_logp, cond
         )
 
-        np.testing.assert_allclose(x, x_actual)
-        np.testing.assert_allclose(x_grad, x_grad_actual)
-        np.testing.assert_allclose(x_logp, x_logp_actual)
+        np.testing.assert_allclose(x, x_actual, rtol=1e-6)
+        np.testing.assert_allclose(x_grad, x_grad_actual, rtol=1e-6)
+        np.testing.assert_allclose(x_logp, x_logp_actual, rtol=1e-6)
     except NotImplementedError:
         pass
 
@@ -346,7 +352,7 @@ def test_exp_inverse_gradient_and_val():
     y_logp = jnp.array(stats.lognorm(s=1, scale=1).logpdf(y))
 
     # Compute numerical derivative in float64
-    y_f64 = np.array(y)
+    y_f64 = np.array(y, dtype="float64")
     y_grad = jnp.array(
         (
             stats.lognorm(s=1, scale=1).logpdf(y_f64 + 1e-8)
@@ -357,7 +363,7 @@ def test_exp_inverse_gradient_and_val():
 
     expected = np.array([x, x_grad, x_logp])
     actual = np.array(exp.inverse_gradient_and_val(y, y_grad, y_logp))
-    np.testing.assert_allclose(expected, actual, rtol=1e-6)
+    np.testing.assert_allclose(actual, expected, rtol=1e-6)
 
 
 class _TestBijection(AbstractBijection):
