@@ -16,6 +16,7 @@ from .sigmoid import Sigmoid
 from .softplus import SoftPlus
 from .tanh import LeakyTanh, Tanh
 from .utils import EmbedCondition, Flip, Identity, Invert, Partial, Permute, Reshape, Sandwich
+from .orthogonal import Householder, DCT, Neg
 
 __all__ = [
     "AdditiveCondition",
@@ -25,14 +26,17 @@ __all__ = [
     "Chain",
     "Concatenate",
     "Coupling",
+    "DCT",
     "EmbedCondition",
     "Exp",
     "Flip",
+    "Householder",
     "Identity",
     "Invert",
     "LeakyTanh",
     "Loc",
     "MaskedAutoregressive",
+    "Neg",
     "Partial",
     "Permute",
     "Power",
