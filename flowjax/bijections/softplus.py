@@ -57,11 +57,11 @@ class AsymmetricAffine(AbstractBijection):
         scale: Scale parameter σ (positive)
         theta: Asymmetry parameter θ (positive)
     """
-    shape: tuple[int, ...] = ()
-    cond_shape: ClassVar[None] = None
     loc: Array
     scale: Array | AbstractUnwrappable[Array]
     theta: Array | AbstractUnwrappable[Array]
+    shape: tuple[int, ...] = ()
+    cond_shape: ClassVar[None] = None
 
     def __init__(
         self,

@@ -99,7 +99,7 @@ bijections = {
         jnp.diag(jnp.array([-1, 2, -3])),
     ),
     "AsymmetricAffine": lambda: AsymmetricAffine(
-        jnp.ones(DIM),
+        jnp.full(DIM, 3.7),
         jnp.full(DIM, 2.6),
         jnp.full(DIM, 0.1),
     ),
