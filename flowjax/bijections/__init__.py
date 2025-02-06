@@ -27,7 +27,7 @@ from .utils import (
     Sandwich,
 )
 from .utils import EmbedCondition, Flip, Identity, Invert, Permute, Reshape, Sandwich
-from .orthogonal import Householder, DCT, Neg
+from .orthogonal import Householder, DCT, Neg, MvScale
 
 __all__ = [
     "AdditiveCondition",
@@ -49,6 +49,7 @@ __all__ = [
     "Loc",
     "MaskedAutoregressive",
     "Indexed",
+    "MvScale",
     "Neg",
     "Permute",
     "Power",

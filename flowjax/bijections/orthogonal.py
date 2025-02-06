@@ -3,7 +3,9 @@ from jax import Array
 import jax.numpy as jnp
 import jax.nn as jnn
 from jax.scipy import fft
-
+from paramax.utils import inv_softplus
+from jax.nn import softplus
+from paramax import AbstractUnwrappable, Parameterize
 
 class Neg(AbstractBijection):
     """A bijection that negates its input (multiplies by -1).
@@ -25,6 +27,65 @@ class Neg(AbstractBijection):
 
     def inverse_and_log_det(self, y: Array, condition: Array | None = None):
         return -y, jnp.zeros(())
+
+class MvScale(AbstractBijection):
+    shape: tuple[int, ...]
+    params: Array
+    scale: Array | AbstractUnwrappable[Array]
+    cond_shape = None
+    base_index: int
+
+    def __init__(self, scale: Array, params: Array, base_index: int = 0):
+        self.shape = (params.shape[-1],)
+        self.params = params
+        self.base_index = base_index
+
+        assert scale.shape == ()
+        self.scale = Parameterize(softplus, inv_softplus(scale))
+
+    def _exp_map_sphere(self, v):
+        """Riemannian exponential map on the n-sphere S^n
+
+        Compute the point on the sphere reached by the exponential
+        map from point p with tangent vector v (shape: (n+1,))
+
+        Parameters:
+        p: Point on the sphere (shape: (n+1,))
+        v: Tangent vector in R^n (shape: (n,))
+        """
+        # Project v into the correct tangent space using Householder transformation
+        #v_proj = householder_transform(p, v)
+        #p = jnp.ones_like(v)
+        #p = p / jnp.linalg.norm(p)
+        p = jnp.zeros_like(v).at[self.base_index].set(1.0)
+        v_proj = v - (v @ p) * p
+
+        norm_v_raw = jnp.linalg.norm(v_proj)
+        # Avoid NaNs in the gradient
+        norm_v = jnp.where(norm_v_raw > 1e-6, norm_v_raw, 1.0)
+
+        direction = v_proj / norm_v
+
+        # General case: Compute the exponential map
+        exp_general = jnp.cos(norm_v) * p + jnp.sin(norm_v) * direction
+
+        # Small v case: Use a Taylor expansion and re-normalize to stay on the sphere
+        exp_taylor = p + v_proj
+        norm_exp_taylor_raw = jnp.linalg.norm(exp_taylor)
+        # Prevent nans in the gradient
+        norm_exp_taylor = jnp.where(norm_exp_taylor_raw > 1e-6, norm_exp_taylor_raw, 1.0)
+        exp_taylor = exp_taylor / norm_exp_taylor
+        return jnp.where(norm_v_raw > 1e-6, exp_general, exp_taylor)
+
+    def transform_and_log_det(self, x: jnp.ndarray, condition: Array | None = None):
+        v = self._exp_map_sphere(self.params)
+        y = x + ((v @ x) * (self.scale - 1)) * v
+        return y, jnp.log(self.scale)
+
+    def inverse_and_log_det(self, y: Array, condition: Array | None = None):
+        v = self._exp_map_sphere(self.params)
+        x = y + ((v @ y) * (1 / self.scale - 1)) * v
+        return x, -jnp.log(self.scale)
 
 
 class Householder(AbstractBijection):
@@ -48,16 +109,57 @@ class Householder(AbstractBijection):
     shape: tuple[int, ...]
     params: Array
     cond_shape = None
+    base_index: int
 
-    def __init__(self, params: Array):
+    def __init__(self, params: Array, base_index: int = 0):
         self.shape = (params.shape[-1],)
         self.params = params
+        self.base_index = base_index
 
     def _householder(self, x: Array, params: Array) -> Array:
-        norm_sq = params @ params
-        norm = jnp.sqrt(norm_sq)
+        def exp_map_sphere(p, v):
+            """Riemannian exponential map on the n-sphere S^n
 
-        vec = params / norm
+            Compute the point on the sphere reached by the exponential
+            map from point p with tangent vector v (shape: (n+1,))
+
+            Parameters:
+            p: Point on the sphere (shape: (n+1,))
+            v: Tangent vector in R^n (shape: (n,))
+            """
+            # Project v into the correct tangent space using Householder transformation
+            #v_proj = householder_transform(p, v)
+            #p = jnp.ones_like(v)
+            #p = p / jnp.linalg.norm(p)
+            p = jnp.zeros_like(v).at[self.base_index].set(1.0)
+            v_proj = v - (v @ p) * p
+
+            norm_v_raw = jnp.linalg.norm(v_proj)
+            # Avoid NaNs in the gradient
+            norm_v = jnp.where(norm_v_raw > 1e-6, norm_v_raw, 1.0)
+
+            direction = v_proj / norm_v
+
+            # General case: Compute the exponential map
+            exp_general = jnp.cos(norm_v) * p + jnp.sin(norm_v) * direction
+
+            # Small v case: Use a Taylor expansion and re-normalize to stay on the sphere
+            exp_taylor = p + v_proj
+            norm_exp_taylor_raw = jnp.linalg.norm(exp_taylor)
+            # Prevent nans in the gradient
+            norm_exp_taylor = jnp.where(norm_exp_taylor_raw > 1e-6, norm_exp_taylor_raw, 1.0)
+            exp_taylor = exp_taylor / norm_exp_taylor
+            return jnp.where(norm_v_raw > 1e-6, exp_general, exp_taylor)
+
+        #norm_sq = params @ params
+        #norm = jnp.sqrt(norm_sq)
+        #vec = params / norm
+
+        if self.shape == (1,):
+            return -x
+
+        vec = exp_map_sphere(jnp.zeros_like(params), params)
+
         return x - 2 * vec * (x @ vec)
 
     def transform_and_log_det(self, x: jnp.ndarray, condition: Array | None = None):

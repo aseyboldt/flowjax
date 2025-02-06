@@ -46,6 +46,7 @@ from flowjax.bijections import (
     TriangularAffine,
     Vmap,
 )
+from flowjax.bijections.orthogonal import MvScale
 from flowjax.bijections.planar import _UnconditionalPlanar
 from flowjax.root_finding import bisection_search, root_finder_to_inverter
 
@@ -142,6 +143,12 @@ bijections = {
             dim=DIM,
             nn_width=10,
             nn_depth=2,
+        )
+    ),
+    "MvScale": (
+        lambda: MvScale(
+            jnp.array(0.3),
+            jnp.full(DIM, 2.0),
         )
     ),
     "Neg": lambda: Neg(shape=(DIM,)),
