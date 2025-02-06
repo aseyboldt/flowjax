@@ -41,6 +41,7 @@ from flowjax.bijections import (
     Scan,
     Sigmoid,
     SoftPlus,
+    SoftPlusX,
     Stack,
     Tanh,
     TriangularAffine,
@@ -81,6 +82,7 @@ bijections = {
     "Exp": lambda: Exp((DIM,)),
     "Sigmoid": lambda: Sigmoid((DIM,)),
     "SoftPlus": lambda: SoftPlus((DIM,)),
+    "SoftPlusX": lambda: SoftPlusX(),
     "TriangularAffine (lower)": lambda: TriangularAffine(
         jnp.arange(DIM),
         jnp.full((DIM, DIM), 0.5),

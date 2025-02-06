@@ -13,7 +13,7 @@ from .planar import Planar
 from .power import Power
 from .rational_quadratic_spline import RationalQuadraticSpline
 from .sigmoid import Sigmoid
-from .softplus import SoftPlus, AsymmetricAffine
+from .softplus import SoftPlus, SoftPlusX, AsymmetricAffine
 from .tanh import LeakyTanh, Tanh
 from .utils import (
     EmbedCondition,
@@ -61,6 +61,7 @@ __all__ = [
     "Scan",
     "Sigmoid",
     "SoftPlus",
+    "SoftPlusX",
     "Stack",
     "Tanh",
     "TriangularAffine",

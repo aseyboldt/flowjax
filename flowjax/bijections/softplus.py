@@ -141,3 +141,58 @@ class AsymmetricAffine(AbstractBijection):
         logjac = self._log_derivative_f(x, mu, sigma, theta)
         return x, -logjac.sum()
 
+
+class SoftPlusX(AbstractBijection):
+    shape: tuple[int, ...] = ()
+    cond_shape: ClassVar[None] = None
+
+    def transform_and_log_det(self, x, condition=None):
+        val = x - 0.5 * jax.nn.softplus(x)
+        logdet = -jnp.log(2) + jnp.log1p(jax.nn.sigmoid(-x))
+        return val, logdet
+
+    def _inverse_and_log_det(self, y, condition=None):
+        y_min = -20.0
+        y_max = 20.0
+
+        term = jnp.sqrt(1 + 4 * jnp.exp(-2*y))
+        val = 2 * y + jnp.log1p(term) - jnp.log(2)
+        logdet = -jnp.log1p(-0.5 * jax.nn.sigmoid(val))
+
+        val = jnp.where(y < y_min, y, val)
+        val = jnp.where(y > y_max, 2 * y, val)
+        logdet = jnp.where(y < y_min, 0.0, logdet)
+        logdet = jnp.where(y < y_max, 0.0, -jnp.log1p(-0.5 * jax.nn.sigmoid(2 * y)))
+
+        return val, logdet
+
+    def inverse_and_log_det(self, y, condition=None):
+        y_min = -20.0
+        y_max = 20.0
+
+        # Compute values for y < y_min
+        val_low = y
+        logdet_low = 0.0
+
+        # Compute values for y > y_max
+        val_high = 2 * y
+        sigmoid_val_high = jax.nn.sigmoid(2 * y)
+        logdet_high = -jnp.log1p(-0.5 * sigmoid_val_high)
+
+        # Compute values for y within [y_min, y_max]
+        y_ = jnp.clip(y, y_min, y_max)
+        exp_neg_2y = jnp.exp(-2 * y_)
+        term = jnp.sqrt(1.0 + 4.0 * exp_neg_2y)
+        val_mid = 2 * y_ + jnp.log1p(term) - jnp.log(2.0)
+        sigmoid_val_mid = jax.nn.sigmoid(val_mid)
+        logdet_mid = -jnp.log1p(-0.5 * sigmoid_val_mid)
+
+        # Use jnp.where to select appropriate values
+        val = jnp.where(
+            y < y_min, val_low, jnp.where(y > y_max, val_high, val_mid)
+        )
+        logdet = jnp.where(
+            y < y_min, logdet_low, jnp.where(y > y_max, logdet_high, logdet_mid)
+        )
+
+        return val, logdet
