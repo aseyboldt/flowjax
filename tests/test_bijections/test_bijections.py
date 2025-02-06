@@ -121,6 +121,15 @@ bijections = {
         nn_width=5,
         nn_depth=2,
     ),
+    "Coupling (non-scalar)": lambda: Coupling(
+        KEY,
+        transformer=Householder(jnp.array([3.0, 4.0, 5.0])),
+        untransformed_dim=2,
+        dim=5,
+        cond_dim=None,
+        nn_width=5,
+        nn_depth=2,
+    ),
     "MaskedAutoregressive_Affine (unconditional)": lambda: MaskedAutoregressive(
         KEY,
         transformer=Affine(),

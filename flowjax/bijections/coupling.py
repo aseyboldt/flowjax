@@ -38,7 +38,8 @@ class Coupling(AbstractBijection):
     untransformed_dim: int
     dim: int
     transformer_constructor: Callable
-    conditioner: eqx.nn.MLP
+    requires_vmap: bool
+    conditioner: eqx.nn.MLP | eqx.Module
 
     def __init__(
         self,
@@ -51,10 +52,22 @@ class Coupling(AbstractBijection):
         nn_width: int,
         nn_depth: int,
         nn_activation: Callable = jnn.relu,
+        conditioner: eqx.Module | None = None,
     ):
-        if transformer.shape != () or transformer.cond_shape is not None:
+        if transformer.cond_shape is not None:
             raise ValueError(
-                "Only unconditional transformers with shape () are supported.",
+                "Only unconditional transformers are supported.",
+            )
+        n_transformed = dim - untransformed_dim
+        if n_transformed < 0:
+            raise ValueError(
+                "The number of untransformed variables must be less than the total "
+                "dimension.",
+            )
+        if transformer.shape != () and transformer.shape != (n_transformed,):
+            raise ValueError(
+                "The transformer must have shape () or (n_transformed,), "
+                f"got {transformer.shape}.",
             )
 
         constructor, num_params = get_ravelled_pytree_constructor(
@@ -63,24 +76,32 @@ class Coupling(AbstractBijection):
             is_leaf=lambda leaf: isinstance(leaf, paramax.NonTrainable),
         )
 
+        if transformer.shape == ():
+            self.requires_vmap = True
+            conditioner_output_size = num_params * n_transformed
+        else:
+            self.requires_vmap = False
+            conditioner_output_size = num_params
+
+
         self.transformer_constructor = constructor
         self.untransformed_dim = untransformed_dim
         self.dim = dim
         self.shape = (dim,)
         self.cond_shape = (cond_dim,) if cond_dim is not None else None
 
-        conditioner_output_size = num_params * (dim - untransformed_dim)
-
-        self.conditioner = eqx.nn.MLP(
-            in_size=(
-                untransformed_dim if cond_dim is None else untransformed_dim + cond_dim
-            ),
-            out_size=conditioner_output_size,
-            width_size=nn_width,
-            depth=nn_depth,
-            activation=nn_activation,
-            key=key,
-        )
+        if conditioner is None:
+            conditioner = eqx.nn.MLP(
+                in_size=(
+                    untransformed_dim if cond_dim is None else untransformed_dim + cond_dim
+                ),
+                out_size=conditioner_output_size,
+                width_size=nn_width,
+                depth=nn_depth,
+                activation=nn_activation,
+                key=key,
+            )
+        self.conditioner = conditioner(conditioner_output_size)
 
     def transform_and_log_det(self, x, condition=None):
         x_cond, x_trans = x[: self.untransformed_dim], x[self.untransformed_dim :]
@@ -102,7 +123,11 @@ class Coupling(AbstractBijection):
 
     def _flat_params_to_transformer(self, params: Array):
         """Reshape to dim X params_per_dim, then vmap."""
-        dim = self.dim - self.untransformed_dim
-        transformer_params = jnp.reshape(params, (dim, -1))
-        transformer = eqx.filter_vmap(self.transformer_constructor)(transformer_params)
-        return Vmap(transformer, in_axes=eqx.if_array(0))
+        if self.requires_vmap:
+            dim = self.dim - self.untransformed_dim
+            transformer_params = jnp.reshape(params, (dim, -1))
+            transformer = eqx.filter_vmap(self.transformer_constructor)(transformer_params)
+            return Vmap(transformer, in_axes=eqx.if_array(0))
+        else:
+            transformer = self.transformer_constructor(params)
+            return transformer
