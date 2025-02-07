@@ -31,17 +31,12 @@ class Neg(AbstractBijection):
 class MvScale(AbstractBijection):
     shape: tuple[int, ...]
     params: Array
-    scale: Array | AbstractUnwrappable[Array]
     cond_shape = None
-    base_index: int
 
-    def __init__(self, scale: Array, params: Array, base_index: int = 0):
+    def __init__(self, params: Array):
         self.shape = (params.shape[-1],)
         self.params = params
-        self.base_index = base_index
 
-        assert scale.shape == ()
-        self.scale = Parameterize(softplus, inv_softplus(scale))
 
     def _exp_map_sphere(self, v):
         """Riemannian exponential map on the n-sphere S^n
@@ -78,14 +73,19 @@ class MvScale(AbstractBijection):
         return jnp.where(norm_v_raw > 1e-6, exp_general, exp_taylor)
 
     def transform_and_log_det(self, x: jnp.ndarray, condition: Array | None = None):
-        v = self._exp_map_sphere(self.params)
-        y = x + ((v @ x) * (self.scale - 1)) * v
-        return y, jnp.log(self.scale)
+        p = self.params
+        norm = jnp.linalg.norm(p)
+        v = p / norm
+
+        y = x + ((v @ x) * (norm - 1)) * v
+        return y, jnp.log(norm)
 
     def inverse_and_log_det(self, y: Array, condition: Array | None = None):
-        v = self._exp_map_sphere(self.params)
-        x = y + ((v @ y) * (1 / self.scale - 1)) * v
-        return x, -jnp.log(self.scale)
+        p = self.params
+        norm = jnp.linalg.norm(p)
+        v = p / norm
+        x = y + ((v @ y) * (1 / norm - 1)) * v
+        return x, -jnp.log(norm)
 
 
 class Householder(AbstractBijection):
